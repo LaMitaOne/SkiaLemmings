@@ -2,7 +2,9 @@
 A lightweight, multi-threaded Lemmings clone written in pure Delphi, utilizing Skia4Delphi for hardware-accelerated 2D rendering. 
 
 This project serves as a technical proof-of-concept to demonstrate how classic 2D game mechanics (pathfinding, state machines, physics, and user interaction) can be efficiently handled in modern Delphi using a decoupled game-loop architecture.
-     
+
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/LaMitaOne/SkiaLemmings)
+          
 
  <img width="640" height="509" alt="Unbenannt" src="https://github.com/user-attachments/assets/5cc8efb6-02ec-404e-9740-b302dcd4c9de" />
 
