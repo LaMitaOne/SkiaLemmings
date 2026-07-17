@@ -50,5 +50,7 @@ Prerequisites
     Delphi (RAD Studio 10.4 Sydney or newer recommended for best Skia4Delphi support).
     Skia4Delphi components installed.
 
+Using royalty free audios from    
+https://www.pavsmusic.com/free-sound-pack-kits/  
       
 Zipped exe and sample project included
