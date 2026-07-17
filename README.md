@@ -46,15 +46,7 @@ For Delphi developers, this repo is a good reference for:
 Prerequisites
 
     Delphi (RAD Studio 10.4 Sydney or newer recommended for best Skia4Delphi support).
-    Skia4Delphi components installed and available in the component palette.
+    Skia4Delphi components installed.
 
-Running the project
-
-    Clone the repository.
-    Open SkiaLemmings.dproj (or your specific project file).
-    Ensure the paths to Skia4Delphi units are correctly mapped in your Project Options.
-    Hit Run (F9).
-    Controls: 
-        Use the bottom toolbar to switch between Dig, Bomb, and Bridge.
-        Click directly on a Lemming to apply the active tool.
-        Click and drag on empty space to build a bridge.
+      
+Zipped exe and sample project included
