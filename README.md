@@ -35,6 +35,7 @@ What's missing to make it a full game:
     Refining the procedural generator to guarantee solvable levels.
     Additional Lemming skills (Climbing, Blocking, Umbrellas/Parachutes).
     Audio polishing (currently uses basic async WinAPI PlaySound).
+    A lot creativity :)
 
 🛠️ Technical Highlights
 
