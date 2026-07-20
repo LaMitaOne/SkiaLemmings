@@ -56,7 +56,7 @@ https://www.pavsmusic.com/free-sound-pack-kits/
       
 Zipped exe and sample project include       
     
-other game prototypes i made:     
+more game prototypes:     
       
 https://github.com/LaMitaOne/Skia_PlatformerGame      
 https://github.com/LaMitaOne/SkiaStarPatrols       
