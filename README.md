@@ -54,4 +54,11 @@ Prerequisites
 Using royalty free audios from    
 https://www.pavsmusic.com/free-sound-pack-kits/  
       
-Zipped exe and sample project included
+Zipped exe and sample project include       
+    
+other game prototypes i made:     
+      
+https://github.com/LaMitaOne/Skia_PlatformerGame      
+https://github.com/LaMitaOne/SkiaStarPatrols       
+https://github.com/LaMitaOne/Skiatris      
+https://github.com/LaMitaOne/Skia-A-Cats-Life      
