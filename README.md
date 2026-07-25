@@ -66,7 +66,7 @@ Select a tool from the bottom toolbar, then interact with the world:
 
 🎮 UI & Game Flow
 
-     Drawn In-Game UI: No VCL/FMX forms used! The entire 2x6 button toolbar is drawn directly via Skia. The active tool is highlighted with a glowing Aqua border.
+     Drawn In-Game UI: No VCL/FMX objects used! The entire 2x6 button toolbar is drawn directly via Skia. The active tool is highlighted with a glowing Aqua border.
      Speed Control: Toggle between normal speed (1.0x) and slow-motion (0.5x) to plan complex actions without pausing.
      Unlimited Mode: A toggle button to give you infinite ammo for all tools (perfect for sandbox puzzle solving).
      Gate Zap Effect: Lemmings near the exit gate are magnetically sucked in. Upon reaching the center, they trigger a Zap/Blitz effect and are counted as "Saved".
@@ -88,7 +88,9 @@ What could be added in the future:
      Level select menu and persistent high-score saving.
      More enemy types (e.g., flying bats, ranged attackers).
      Background music integration.
-     Mobile/Touch optimizations for Android/iOS deployment.
+     Mobile/Touch optimizations for Android/iOS deployment.     
+     Zoom atm wrong I saw    
+
 
 🛠️ Getting Started
 Prerequisites
