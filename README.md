@@ -114,7 +114,6 @@ What could be added in the future:
      More enemy types (e.g., flying bats, ranged attackers).
      Background music integration.
      Mobile/Touch optimizations for Android/iOS deployment.     
-     Zoom atm wrong I saw    
 
 
 🛠️ Getting Started
