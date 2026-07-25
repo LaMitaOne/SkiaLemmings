@@ -1,5 +1,5 @@
 # SkiaLemmings
-A lightweight, multi-threaded Lemmings, Worms, and Portal hybrid written in pure Delphi, utilizing Skia4Delphi for hardware-accelerated 2D rendering.   
+A lightweight, multi-threaded Lemmings(Catlings), Worms, and Portal hybrid written in pure Delphi, utilizing Skia4Delphi for hardware-accelerated 2D rendering.   
     
 What started as a classic Lemmings clone has evolved into a fast-paced Touch-Game: Save the Catlings (or Humans) by digging, building, and blowing up the terrain, while using Portal-guns, Bazookas, and Grab-tools to overcome obstacles and defeat cave monsters!    
 
