@@ -9,7 +9,7 @@ What started as a classic Lemmings clone has evolved into a fast-paced Touch-Gam
               
 Sample Video: https://www.youtube.com/watch?v=z7uKRacZKko   
     
-✨ Features (v0.2)
+✨ Features (v0.2 alpha)
 
 The core gameplay loop is fully functional, featuring a massive upgrade in mechanics, UI, and visual feedback compared to v0.1:
 🐭 Classic Lemmings & Touch-Tools
