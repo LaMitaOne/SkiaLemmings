@@ -24,7 +24,45 @@ The core gameplay loop is fully functional, featuring a massive upgrade in mecha
 🐉 Enemies & Dynamic Elements
 
      Cave Monsters: Deep caves are guarded by patrolling monsters. If a Lemming touches one, both explode in a burst of particles. Monsters can be killed with Bazookas, Bombs, or by dropping them into pits.
-     Loot & Upgrades: Find glowing orbs in caves to gain extra Bazooka ammo, Eraser charges, or bonus Lemmings.
+     Loot & Upgrades: Find glowing orbs in caves to gain extra Bazooka ammo, Eraser charges, or bonus Lemmings.   
+
+🎮 Controls
+
+The game supports both mouse interaction and keyboard shortcuts. Since it blends different genres, the controls vary depending on your currently selected tool.
+Global Controls
+
+     Mouse Wheel: Zoom in / out (centered on cursor).
+     ESC or M: Toggle Pause Menu.
+     C: Toggle between Cat and Human avatars.
+     V: Switch texture modes (Normal Dirt / Synthwave).
+     F: Cycle post-processing screen filters (None / Film Grain / Vignette).
+     U: Toggle Unlimited Ammo mode.
+
+Mouse & Tool Interactions
+
+Select a tool from the bottom toolbar, then interact with the world:
+
+     Classic Skills (Dig, Bomb, LemBridge, Climber, Blocker): 
+         Left-Click directly on a Lemming to assign the skill.
+     Mine (Directional):
+         Left-Click & Drag on a Lemming to aim the mining direction. Release to start digging a tunnel in that specific vector.
+     Bazooka:
+         Left-Click on a Lemming to select it as the shooter. The game enters Aiming Mode.
+         While Aiming, Move Mouse to aim (a trajectory preview is shown).
+         Left-Click again to fire the rocket.
+     Grab:
+         Left-Click & Hold on a Lemming to pick it up. Move your mouse to carry it through the air or over walls.
+         Release Left-Click to drop the Lemming (it will fall and parachute if high enough).
+     Eraser: 
+         Left-Click on the terrain to instantly delete tiles (creates a small explosion radius).
+     UsrBridge (User Bridge):
+         Left-Click & Drag from one point to another to draw a custom 1-block-thick diagonal bridge.
+     Portal:
+         Left-Click to place the Blue Portal.
+         Left-Click again to place the Orange Portal. (Lemmings and Bazooka rockets can teleport between them).
+         Left-Click a third time to clear both portals and start over.
+     Unlimited / Pause: 
+         Click this button in the bottom-right corner to toggle infinite ammo.
 
 🎮 UI & Game Flow
 
