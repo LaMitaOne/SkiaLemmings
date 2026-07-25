@@ -115,4 +115,15 @@ A zipped .exe and sample project are included in the repository for immediate te
    2.5D isometric cat game https://github.com/LaMitaOne/Skia-A-Cats-Life      
      
 🎮 Game components FMX:    
-   MRX Gamepad Core https://github.com/LaMitaOne/MRX-Gamepad-Core    
+   MRX Gamepad Core https://github.com/LaMitaOne/MRX-Gamepad-Core       
+
+   
+If you want to tip me a coffee.. :)   
+    
+<p align="center">
+  <a href="https://www.paypal.com/donate/?hosted_button_id=RX5KTTMXW497Q">
+    <img src="https://www.paypalobjects.com/en_US/i/btn/btn_donate_LG.gif" alt="Donate with PayPal"/>
+  </a>
+</p>
+        
+
