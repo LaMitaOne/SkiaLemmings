@@ -105,10 +105,12 @@ Game Design Sound Effects - Pavs Music/
 A zipped .exe and sample project are included in the repository for immediate testing. 
    
     
-more game prototypes:     
-      
-https://github.com/LaMitaOne/Skia_PlatformerGame      
-https://github.com/LaMitaOne/SkiaStarPatrols       
-https://github.com/LaMitaOne/Skiatris      
-https://github.com/LaMitaOne/Skia-A-Cats-Life      
-https://github.com/LaMitaOne/Skia-RTS-Game    
+🎮 Skia4Delphi Games (each one file, no ext engine):    
+   2D Platformer https://github.com/LaMitaOne/Skia_PlatformerGame    
+   C&C style 2.5D isometric rts https://github.com/LaMitaOne/Skia-RTS-Game   
+   Tetris clone https://github.com/LaMitaOne/Skiatris    
+   2D side-scrolling space shooter https://github.com/LaMitaOne/SkiaStarPatrols    
+   2.5D isometric cat game https://github.com/LaMitaOne/Skia-A-Cats-Life      
+     
+🎮 Game components FMX:    
+   MRX Gamepad Core https://github.com/LaMitaOne/MRX-Gamepad-Core    
