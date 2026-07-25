@@ -9,7 +9,7 @@ What started as a classic Lemmings clone has evolved into a fast-paced Touch-Gam
               
 Sample Video: https://www.youtube.com/watch?v=z7uKRacZKko   
     
-✨ Features (v0.2 alpha)
+✨ Features (v0.3 alpha)
 
 The core gameplay loop is fully functional, featuring a massive upgrade in mechanics, UI, and visual feedback compared to v0.1:
 🐭 Classic Lemmings & Touch-Tools
@@ -82,6 +82,27 @@ Select a tool from the bottom toolbar, then interact with the world:
      Hardware-Accelerated Rendering: Uses TSkCustomControl for direct Skia Canvas access. Includes parallax scrolling backgrounds, procedural textures (Nature & Cyberpunk modes), and post-processing filters (Sepia, Cuphead-style film grain).
      Optimized Terrain: Tile map rendering uses frustum culling and cached tile records to prevent memory leaks during mass explosions.
 
+Latest Changes:    
+    
+v0.3 alpha:    
+     
+    -Fixed Bazooka trajectory to perfectly match the aim prediction line; slightly reduced blast radius.
+    -Reworked Exit Gate: Smaller (1/3), placed flush on the ground, and completely cleared of terrain above/sides.
+    -Optimized Gate Magnet: Lemmings bypass collisions when sucked in to prevent getting stuck.
+    -Fixed Lemming death on enemy contact.
+    -Level now ends successfully when all Lemmings are either saved or dead.
+    -Shifted Cat and Human avatars 4 pixels up for better tile alignment.
+    -Added dynamic Screen Shake on explosions.
+    -Lemmings are now drawn in front of the Exit Gate.
+    -Added "MENU" button to the bottom-right of the toolbar.
+    -Pause Menu now has clickable buttons (Resume, Reset Level, New Level).
+    -Added dynamic ammo counters directly to all tool button texts (e.g., Dig x5, ∞ when unlimited).
+    -Synced Tool button colors with their matching Loot upgrade colors.
+    -Loot upgrades reworked: 11 tool-specific upgrades, strictly spawned in the air (never in terrain).
+     "Unlimited" and "Menu" buttons recolored to neutral gray (UI controls, not upgrades).
+    -Fixed camera zoom and positioning to eliminate black borders and wrong viewports.
+     
+     
 🚧 Status & Roadmap
 
 This is a highly playable sandbox/arcade prototype. 
