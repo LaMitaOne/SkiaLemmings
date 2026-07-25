@@ -5,7 +5,10 @@ What started as a classic Lemmings clone has evolved into a fast-paced Touch-Gam
 
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/LaMitaOne/SkiaLemmings)   
 <img width="1920" height="1080" alt="Unbenannt" src="https://github.com/user-attachments/assets/c477ef5c-6756-4698-be8a-c8be9b9cd3fb" />    
+
               
+Sample Video: https://www.youtube.com/watch?v=z7uKRacZKko   
+    
 ✨ Features (v0.2)
 
 The core gameplay loop is fully functional, featuring a massive upgrade in mechanics, UI, and visual feedback compared to v0.1:
