@@ -10,9 +10,10 @@ What started as a classic Lemmings clone has evolved into a fast-paced Touch-Gam
               
 Sample Video: https://www.youtube.com/watch?v=z7uKRacZKko   
     
-✨ Features (v0.3 alpha)
+✨ Features (v0.4 alpha)
 
-The core gameplay loop is fully functional, featuring a massive upgrade in mechanics, UI, and visual feedback compared to v0.1:
+The core gameplay loop is fully functional, featuring a massive upgrade in mechanics, UI, and visual feedback compared to v0.1:   
+    
 🐭 Classic Lemmings & Touch-Tools
 
      Procedural Level Generation: Creates randomized underground cave systems featuring dirt, stone, steel borders, diggable walls, deep caverns, and a grounded exit gate.
@@ -84,8 +85,28 @@ Select a tool from the bottom toolbar, then interact with the world:
      Optimized Terrain: Tile map rendering uses frustum culling and cached tile records to prevent memory leaks during mass explosions.
 
 Latest Changes:    
+   
+v0.4:    
     
-v0.3 alpha:    
+    -Fixed Climber and Bridging   
+    -User Bridge now snaps to the ground automatically if placed near the surface, but can still be built freely in the air.   
+    -Lemmings can now seamlessly walk up bridge stairs (up to 8px step height) without getting stuck or falling through.   
+    -Bridge Builder now acts as a solid invisible wall for other Lemmings behind him. They instantly turn around and wait instead of falling off the edge.   
+    -Bridge Builder stops building if he hits a ceiling or wall above/in front of him.   
+    -Fixed direction detection: Climbers now correctly detect and climb walls on both their left and right sides.   
+    -Fixed an endless loop bug where Climbers would bounce between 'Walking' and 'Climbing' states without moving up.   
+    -Climbers now correctly pull themselves over the top edge of a wall.   
+    -Fixed Tool Ammo captions not updating immediately after using a tool (e.g., Mine, User Bridge).   
+    -"Unlimited" button no longer overwrites the currently selected tool. It simply toggles infinite ammo while keeping your last tool active.   
+    -Added Middle Mouse Button (mbMiddle) support to grab and pan the camera view when zoomed in.   
+    -Added Parallax background layers (Far/Near Mountains) for better depth perception.   
+    -Parachute offset adjusted by 4px to prevent clipping into left-side walls.   
+    -Added "11 - Tin Light.wav" sound effect for bridge building.   
+    -The game now starts in a "Paused" state with a "Start Level" button in the center of the screen.    
+    -Levels no longer auto-advance immediately. When a level is complete, a "Level Complete" overlay menu appears with a "Next Level" button.    
+
+    
+v0.3:    
      
     -Fixed Bazooka trajectory to perfectly match the aim prediction line; slightly reduced blast radius.
     -Reworked Exit Gate: Smaller (1/3), placed flush on the ground, and completely cleared of terrain above/sides.
