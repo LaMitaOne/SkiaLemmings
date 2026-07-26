@@ -6,25 +6,6 @@
   terrain textures are generated procedurally via code (Vector graphics & Shaders).
   Author:  Lara Miriam Tamy Reschke
   License: MIT
-
-v0.3 alpha:
-
-    -Fixed Bazooka trajectory to perfectly match the aim prediction line; slightly reduced blast radius.
-    -Reworked Exit Gate: Smaller (1/3), placed flush on the ground, and completely cleared of terrain above/sides.
-    -Optimized Gate Magnet: Lemmings bypass collisions when sucked in to prevent getting stuck.
-    -Fixed Lemming death on enemy contact.
-    -Level now ends successfully when all Lemmings are either saved or dead.
-    -Shifted Cat and Human avatars 4 pixels up for better tile alignment.
-    -Added dynamic Screen Shake on explosions.
-    -Lemmings are now drawn in front of the Exit Gate.
-    -Added "MENU" button to the bottom-right of the toolbar.
-    -Pause Menu now has clickable buttons (Resume, Reset Level, New Level).
-    -Added dynamic ammo counters directly to all tool button texts (e.g., Dig x5, ∞ when unlimited).
-    -Synced Tool button colors with their matching Loot upgrade colors.
-    -Loot upgrades reworked: 11 tool-specific upgrades, strictly spawned in the air (never in terrain).
-     "Unlimited" and "Menu" buttons recolored to neutral gray (UI controls, not upgrades).
-    -Fixed camera zoom and positioning to eliminate black borders and wrong viewports.
-
 *******************************************************************************}
 unit SkiaLemmings;
 
@@ -57,6 +38,10 @@ type
     DigTime: Single;
   end;
 
+  TBridgePlate = record
+    X, Y, W, H: Single;
+  end;
+
   TLemming = record
     Pos: TPointF;
     Vel: TPointF;
@@ -82,7 +67,7 @@ type
 
   TLoot = record
     Pos: TPointF;
-    Kind: Integer; // 0=Dig, 1=Mine, 2=Bomb, 3=LemBridge, 4=Climber, 5=Blocker, 6=Bazooka, 7=Eraser, 8=UserBridge, 9=Portal, 10=Grab
+    Kind: Integer;
     Collected: Boolean;
     Phase: Single;
   end;
@@ -137,17 +122,19 @@ type
     FZoom: Single;
     FViewOffsetX, FViewOffsetY: Single;
     FMouseScreen: TPointF;
+    FIsPanning: Boolean;
+    FPanStart: TPointF;
 
     FLemmings: TList<TLemming>;
     FParticles: TList<TParticle>;
     FLoot: TList<TLoot>;
     FBazookas: TList<TBazooka>;
     FEnemies: TList<TEnemy>;
+    FBridgePlates: TList<TBridgePlate>;
     FPortals: array[0..1] of TPortal;
 
     FActiveTool: TToolType;
     FUnlimited: Boolean;
-    // Ammo for all tools
     FDigAmmo, FMineAmmo, FBombAmmo, FLemBridgeAmmo, FClimberAmmo, FBlockerAmmo: Integer;
     FBazookaAmmo, FEraserAmmo, FBridgeAmmo, FPortalAmmo, FGrabAmmo: Integer;
 
@@ -163,10 +150,12 @@ type
     FShakeIntensity: Single;
 
     FToolbarImg: ISkImage;
-    FCatImg, FHumanImg, FParaImg: ISkImage;
+    FCatImgs, FHumanImgs: array[0..1] of ISkImage;
+    FCatClimbImgs, FHumanClimbImgs: array[0..1] of ISkImage;
+    FParaImg: ISkImage;
     FGrassShader, FDirtShader, FStoneShader, FSteelShader: ISkShader;
     FGrainShader: ISkShader;
-    FBgClouds: TArray<TPointF>;
+    FBgClouds, FBgMountainsFar, FBgMountainsNear: TArray<TPointF>;
 
     FVisualMode: Integer;
     FFilterMode: Integer;
@@ -197,9 +186,15 @@ type
     procedure FireBazooka(const TargetX, TargetY: Single);
     procedure EraserAt(const X, Y: Single);
     procedure BuildBridge(const P1, P2: TPointF);
+    procedure ExplodeTerrainAndPlates(const X, Y, Radius: Single);
+
+    function IsSolidAt(const X, Y: Single; IgnoreBlocker: Boolean = False): Boolean;
+    function GetSurfaceY(const X, Y: Single; IgnoreBlocker: Boolean = False): Single;
+    function GetBridgeStepUp(const X, Y: Single): Single;
 
     procedure DrawBackgrounds(const ACanvas: ISkCanvas; const ADest: TRectF);
     procedure DrawTileMap(const ACanvas: ISkCanvas);
+    procedure DrawBridgePlates(const ACanvas: ISkCanvas);
     procedure DrawGate(const ACanvas: ISkCanvas);
     procedure DrawSpawnGate(const ACanvas: ISkCanvas);
     procedure DrawLoot(const ACanvas: ISkCanvas);
@@ -241,30 +236,12 @@ const
     Solid: False;
     DigTime: 0
   );
-  CBridgeTile: TTile = (
-    TileType: ttBridge;
-    Solid: True;
-    DigTime: 1.0
-  );
   CBlockerTile: TTile = (
     TileType: ttBlocker;
     Solid: True;
     DigTime: 999
   );
-
-  // Colors for Tools and matching Loot
-  ToolColors: array[0..10] of TAlphaColor = ($FFA52A2A, // 0: Dig (Brown)
-    $FFFF8800, // 1: Mine (Orange)
-    $FFFF0000, // 2: Bomb (Red)
-    $FFDEB887, // 3: LemBridge (BurlyWood)
-    $FF00FF00, // 4: Climber (Green)
-    $FFFFFF00, // 5: Blocker (Yellow)
-    $FF00FFFF, // 6: Bazooka (Aqua)
-    $FFFFFFFF, // 7: Eraser (White)
-    $FF8B4513, // 8: UserBridge (SaddleBrown)
-    $FF0000FF, // 9: Portal (Blue)
-    $FF32CD32  // 10: Grab (LimeGreen)
-    );
+  ToolColors: array[0..10] of TAlphaColor = ($FFA52A2A, $FFFF8800, $FFFF0000, $FFDEB887, $FF00FF00, $FFFFFF00, $FF00FFFF, $FFFFFFFF, $FF8B4513, $FF0000FF, $FF32CD32);
 
 function PtInRect(const P: TPointF; const R: TRectF): Boolean;
 begin
@@ -333,6 +310,118 @@ function TSkiaLemmings.PtDistance(const P1, P2: TPointF): Single;
 begin
   Result := Sqrt(Sqr(P1.X - P2.X) + Sqr(P1.Y - P2.Y));
 end;
+
+{ --- HELPER COLLISIONS --- }
+function TSkiaLemmings.IsSolidAt(const X, Y: Single; IgnoreBlocker: Boolean = False): Boolean;
+var
+  P: TBridgePlate;
+  L: TLemming;
+begin
+  if (X < 0) or (X >= FMapCols * TILE_SIZE) or (Y < 0) or (Y >= FMapRows * TILE_SIZE) then
+    Exit(True);
+
+  Result := IsSolidTile(FTiles, FMapCols, FMapRows, X, Y, IgnoreBlocker);
+  if Result then
+    Exit;
+
+  // Check bridge plates collision
+  for P in FBridgePlates do
+    if (X >= P.X) and (X <= P.X + P.W) and (Y >= P.Y) and (Y <= P.Y + P.H) then
+      Exit(True);
+
+  // Treat lemmings currently building a bridge as solid walls so others turn around instantly.
+  // The wall is a tight box around the builder: 12px above, 14px below, 6px in front.
+  if not IgnoreBlocker then
+  begin
+    for L in FLemmings do
+    begin
+      if L.State = lsBridging then
+      begin
+        if (X >= L.Pos.X - 6) and (X <= L.Pos.X + L.Width + 6) and (Y >= L.Pos.Y - 12) and (Y <= L.Pos.Y + L.Height + 14) then
+          Exit(True);
+      end;
+    end;
+  end;
+end;
+
+function TSkiaLemmings.GetSurfaceY(const X, Y: Single; IgnoreBlocker: Boolean = False): Single;
+var
+  P: TBridgePlate;
+  MinY: Single;
+  TestX: Single;
+  D: Integer;
+  L: TLemming;
+begin
+  Result := -1;
+  MinY := 99999;
+  for D in [-6, 0, 6] do
+  begin
+    TestX := X + D;
+    if (TestX < 0) or (TestX >= FMapCols * TILE_SIZE) then
+      Continue;
+
+    if IsSolidTile(FTiles, FMapCols, FMapRows, TestX, Y, IgnoreBlocker) then
+    begin
+      var TileTopY := Trunc(Y / TILE_SIZE) * TILE_SIZE;
+      if (Y >= TileTopY) and (TileTopY < MinY) then
+        MinY := TileTopY;
+    end;
+
+    for P in FBridgePlates do
+    begin
+      if (TestX >= P.X) and (TestX <= P.X + P.W) and (Y >= P.Y) and (Y <= P.Y + P.H + 1) then
+      begin
+        if P.Y < MinY then
+          MinY := P.Y;
+      end;
+    end;
+
+    // Treat bridge builder as ground for the lemming directly behind it
+    if not IgnoreBlocker then
+    begin
+      for L in FLemmings do
+      begin
+        if L.State = lsBridging then
+        begin
+          if (TestX >= L.Pos.X - 6) and (TestX <= L.Pos.X + L.Width + 6) and (Y >= L.Pos.Y - 12) and (Y <= L.Pos.Y + L.Height + 14) then
+          begin
+            if L.Pos.Y < MinY then
+              MinY := L.Pos.Y;
+          end;
+        end;
+      end;
+    end;
+  end;
+
+  if MinY <> 99999 then
+    Result := MinY;
+end;
+
+function TSkiaLemmings.GetBridgeStepUp(const X, Y: Single): Single;
+var
+  P: TBridgePlate;
+  MinY: Single;
+  TestX: Single;
+  D: Integer;
+begin
+  Result := -1;
+  MinY := 99999;
+  for D in [-6, 0, 6] do
+  begin
+    TestX := X + D;
+    for P in FBridgePlates do
+    begin
+      if (TestX >= P.X) and (TestX <= P.X + P.W) and (Y >= P.Y - 8) and (Y <= P.Y + P.H + 1) then
+      begin
+        if P.Y < MinY then
+          MinY := P.Y;
+      end;
+    end;
+  end;
+  if MinY <> 99999 then
+    Result := MinY;
+end;
+
 
 { --- VIEW & CAMERA --- }
 procedure TSkiaLemmings.CalculateViewMetrics;
@@ -554,7 +643,6 @@ var
     LCanvas.DrawCircle(PointF(R.CenterPoint.X, R.CenterPoint.Y - 10), 8, LPaint);
 
     LPaint.Color := TAlphaColors.White;
-    // Fixed offset to center text manually
     LCanvas.DrawSimpleText(Text, R.CenterPoint.X - 20, R.CenterPoint.Y + 25, LFontObj, LPaint);
   end;
 
@@ -585,7 +673,6 @@ begin
     BtnW2 := Width / 7;
     BtnH := 100;
 
-    // Row 1 (Tools)
     DrawBtnWithAmmo(0, 0, BtnW1, 'Dig', ToolColors[0], FActiveTool = ttDig, FDigAmmo);
     DrawBtnWithAmmo(1, 0, BtnW1, 'Mine', ToolColors[1], FActiveTool = ttMine, FMineAmmo);
     DrawBtnWithAmmo(2, 0, BtnW1, 'Bomb', ToolColors[2], FActiveTool = ttBomb, FBombAmmo);
@@ -593,18 +680,16 @@ begin
     DrawBtnWithAmmo(4, 0, BtnW1, 'Climb', ToolColors[4], FActiveTool = ttClimber, FClimberAmmo);
     DrawBtnWithAmmo(5, 0, BtnW1, 'Block', ToolColors[5], FActiveTool = ttBlockerTool, FBlockerAmmo);
 
-    // Row 2 (Weapons/Utilities)
     DrawBtnWithAmmo(0, 1, BtnW2, 'Bazooka', ToolColors[6], FActiveTool = ttBazooka, FBazookaAmmo);
     DrawBtnWithAmmo(1, 1, BtnW2, 'Eraser', ToolColors[7], FActiveTool = ttEraser, FEraserAmmo);
     DrawBtnWithAmmo(2, 1, BtnW2, 'UserBrg', ToolColors[8], FActiveTool = ttUserBridge, FBridgeAmmo);
     DrawBtnWithAmmo(3, 1, BtnW2, 'Portal', ToolColors[9], FActiveTool = ttPortal, FPortalAmmo);
     DrawBtnWithAmmo(4, 1, BtnW2, 'Grab', ToolColors[10], FActiveTool = ttGrab, FGrabAmmo);
 
-    // Unlimited & Menu (Gray utility buttons, no ammo count)
     if FUnlimited then
-      DrawBtn(5, 1, BtnW2, 'UNL: ON', $FF888888, FActiveTool = ttUnlimited)
+      DrawBtn(5, 1, BtnW2, 'UNL: ON', $FF888888, False)
     else
-      DrawBtn(5, 1, BtnW2, 'UNL: OFF', $FF888888, FActiveTool = ttUnlimited);
+      DrawBtn(5, 1, BtnW2, 'UNL: OFF', $FF888888, False);
 
     DrawBtn(6, 1, BtnW2, 'MENU', $FF888888, FMenuActive);
 
@@ -621,80 +706,195 @@ var
   LPaint: ISkPaint;
   PB: ISkPathBuilder;
   BodyRect, HeadRect: TRectF;
+  Frame: Integer;
 begin
-  // Draw Cat Avatar
-  LSurf := TSkSurface.MakeRaster(32, 32);
-  LCanvas := LSurf.Canvas;
-  LCanvas.Clear($00000000);
-  LPaint := TSkPaint.Create;
-  LPaint.AntiAlias := True;
-  LPaint.Style := TSkPaintStyle.Fill;
-  LPaint.Color := $FF333333;
+  // Walk Cat
+  for Frame := 0 to 1 do
+  begin
+    LSurf := TSkSurface.MakeRaster(32, 32);
+    LCanvas := LSurf.Canvas;
+    LCanvas.Clear($00000000);
+    LPaint := TSkPaint.Create;
+    LPaint.AntiAlias := True;
+    LPaint.Style := TSkPaintStyle.Fill;
+    LPaint.Color := $FF333333;
 
-  // FIX: Moved Cat body 4 pixels up (Y from 10 to 6)
-  BodyRect := RectF(8, 6, 24, 18);
-  LCanvas.DrawOval(BodyRect, LPaint);
+    BodyRect := RectF(8, 6, 24, 18);
+    LCanvas.DrawOval(BodyRect, LPaint);
 
-  LPaint.Style := TSkPaintStyle.Stroke;
-  LPaint.StrokeWidth := 2.5;
-  LPaint.StrokeCap := TSkStrokeCap.Round;
-  // FIX: Moved Cat legs 4 pixels up to match body
-  LCanvas.DrawLine(PointF(12, 18), PointF(12, 24), LPaint);
-  LCanvas.DrawLine(PointF(20, 18), PointF(20, 24), LPaint);
+    LPaint.Style := TSkPaintStyle.Stroke;
+    LPaint.StrokeWidth := 2.5;
+    LPaint.StrokeCap := TSkStrokeCap.Round;
 
-  LPaint.Style := TSkPaintStyle.Fill;
-  HeadRect := RectF(16, 4, 26, 14); // Head stays relative to body
-  LCanvas.DrawOval(HeadRect, LPaint);
+    if Frame = 0 then
+    begin
+      LCanvas.DrawLine(PointF(12, 18), PointF(10, 24), LPaint);
+      LCanvas.DrawLine(PointF(20, 18), PointF(22, 24), LPaint);
+    end
+    else
+    begin
+      LCanvas.DrawLine(PointF(12, 18), PointF(14, 24), LPaint);
+      LCanvas.DrawLine(PointF(20, 18), PointF(18, 24), LPaint);
+    end;
 
-  PB := TSkPathBuilder.Create;
-  PB.MoveTo(17, 6);
-  PB.LineTo(19, 0);
-  PB.LineTo(21, 6);
-  PB.MoveTo(23, 6);
-  PB.LineTo(25, 0);
-  PB.LineTo(27, 6);
-  LCanvas.DrawPath(PB.Snapshot, LPaint);
-  LPaint.Style := TSkPaintStyle.Stroke;
-  LCanvas.DrawLine(PointF(8, 16), PointF(2, 10), LPaint);
-  LPaint.Style := TSkPaintStyle.Fill;
-  LPaint.Color := TAlphaColors.Yellow;
-  LCanvas.DrawCircle(PointF(19, 9), 1.5, LPaint);
-  LCanvas.DrawCircle(PointF(23, 9), 1.5, LPaint);
-  FCatImg := LSurf.MakeImageSnapshot;
+    LPaint.Style := TSkPaintStyle.Fill;
+    HeadRect := RectF(16, 4, 26, 14);
+    LCanvas.DrawOval(HeadRect, LPaint);
 
-  // Draw Human Avatar
-  LSurf := TSkSurface.MakeRaster(32, 32);
-  LCanvas := LSurf.Canvas;
-  LCanvas.Clear($00000000);
-  LPaint.Style := TSkPaintStyle.Stroke;
-  LPaint.StrokeWidth := 2.5;
-  LPaint.StrokeCap := TSkStrokeCap.Round;
-  LPaint.Color := $FF2A2A2A;
-  PB := TSkPathBuilder.Create;
+    PB := TSkPathBuilder.Create;
+    PB.MoveTo(17, 6);
+    PB.LineTo(19, 0);
+    PB.LineTo(21, 6);
+    PB.MoveTo(23, 6);
+    PB.LineTo(25, 0);
+    PB.LineTo(27, 6);
+    LCanvas.DrawPath(PB.Snapshot, LPaint);
 
-  // FIX: Moved Human body and legs 4 pixels up (Y from 20 to 16, 28 to 24)
-  PB.MoveTo(13, 16);
-  PB.LineTo(13, 24); // Legs
-  PB.MoveTo(19, 16);
-  PB.LineTo(19, 24);
-  PB.MoveTo(16, 8);
-  PB.LineTo(16, 16);  // Body (also moved 4 up)
-  PB.MoveTo(16, 10);
-  PB.LineTo(11, 14); // Arms (also moved 4 up)
-  PB.MoveTo(16, 10);
-  PB.LineTo(21, 14);
+    LPaint.Style := TSkPaintStyle.Stroke;
+    LCanvas.DrawLine(PointF(8, 16), PointF(2, 10), LPaint);
 
-  LCanvas.DrawPath(PB.Snapshot, LPaint);
+    LPaint.Style := TSkPaintStyle.Fill;
+    LPaint.Color := TAlphaColors.Yellow;
+    LCanvas.DrawCircle(PointF(19, 9), 1.5, LPaint);
+    LCanvas.DrawCircle(PointF(23, 9), 1.5, LPaint);
 
-  // Head (moved 4 up: Y from 8 to 4)
-  LPaint.Style := TSkPaintStyle.Fill;
-  LPaint.Color := $FFD2B48C;
-  LCanvas.DrawCircle(PointF(16, 4), 4.5, LPaint);
-  LPaint.Color := TAlphaColors.Black;
-  LCanvas.DrawCircle(PointF(18, 3), 1, LPaint); // Eye (moved 4 up)
-  FHumanImg := LSurf.MakeImageSnapshot;
+    FCatImgs[Frame] := LSurf.MakeImageSnapshot;
+  end;
 
-  // Parachute (stays same, only used when falling)
+  // Climb Cat
+  for Frame := 0 to 1 do
+  begin
+    LSurf := TSkSurface.MakeRaster(32, 32);
+    LCanvas := LSurf.Canvas;
+    LCanvas.Clear($00000000);
+    LPaint := TSkPaint.Create;
+    LPaint.AntiAlias := True;
+    LPaint.Style := TSkPaintStyle.Fill;
+    LPaint.Color := $FF333333;
+    BodyRect := RectF(18, 8, 28, 20);
+    LCanvas.DrawOval(BodyRect, LPaint);
+    HeadRect := RectF(22, 2, 30, 12);
+    LCanvas.DrawOval(HeadRect, LPaint);
+
+    PB := TSkPathBuilder.Create;
+    PB.MoveTo(25, 4);
+    PB.LineTo(27, -2);
+    PB.LineTo(29, 4);
+    LCanvas.DrawPath(PB.Snapshot, LPaint);
+
+    LPaint.Style := TSkPaintStyle.Stroke;
+    LPaint.StrokeWidth := 2.5;
+    LPaint.StrokeCap := TSkStrokeCap.Round;
+    LPaint.Color := $FF333333;
+
+    if Frame = 0 then
+    begin
+      LCanvas.DrawLine(PointF(20, 10), PointF(14, 6), LPaint); // Arm up
+      LCanvas.DrawLine(PointF(22, 18), PointF(16, 24), LPaint); // Leg down
+    end
+    else
+    begin
+      LCanvas.DrawLine(PointF(20, 16), PointF(14, 20), LPaint); // Arm down
+      LCanvas.DrawLine(PointF(22, 12), PointF(16, 6), LPaint); // Leg up
+    end;
+
+    LPaint.Style := TSkPaintStyle.Fill;
+    LPaint.Color := TAlphaColors.Yellow;
+    LCanvas.DrawCircle(PointF(26, 7), 1.5, LPaint);
+
+    FCatClimbImgs[Frame] := LSurf.MakeImageSnapshot;
+  end;
+
+  // Walk Human
+  for Frame := 0 to 1 do
+  begin
+    LSurf := TSkSurface.MakeRaster(32, 32);
+    LCanvas := LSurf.Canvas;
+    LCanvas.Clear($00000000);
+    LPaint.Style := TSkPaintStyle.Stroke;
+    LPaint.StrokeWidth := 2.5;
+    LPaint.StrokeCap := TSkStrokeCap.Round;
+    LPaint.Color := $FF2A2A2A;
+    PB := TSkPathBuilder.Create;
+
+    PB.MoveTo(16, 8);
+    PB.LineTo(16, 16);
+    PB.MoveTo(16, 10);
+    PB.LineTo(11, 14);
+    PB.MoveTo(16, 10);
+    PB.LineTo(21, 14);
+
+    if Frame = 0 then
+    begin
+      PB.MoveTo(13, 16);
+      PB.LineTo(11, 24);
+      PB.MoveTo(19, 16);
+      PB.LineTo(21, 24);
+    end
+    else
+    begin
+      PB.MoveTo(13, 16);
+      PB.LineTo(15, 24);
+      PB.MoveTo(19, 16);
+      PB.LineTo(17, 24);
+    end;
+
+    LCanvas.DrawPath(PB.Snapshot, LPaint);
+
+    LPaint.Style := TSkPaintStyle.Fill;
+    LPaint.Color := $FFD2B48C;
+    LCanvas.DrawCircle(PointF(16, 4), 4.5, LPaint);
+    LPaint.Color := TAlphaColors.Black;
+    LCanvas.DrawCircle(PointF(18, 3), 1, LPaint);
+
+    FHumanImgs[Frame] := LSurf.MakeImageSnapshot;
+  end;
+
+  // Climb Human
+  for Frame := 0 to 1 do
+  begin
+    LSurf := TSkSurface.MakeRaster(32, 32);
+    LCanvas := LSurf.Canvas;
+    LCanvas.Clear($00000000);
+    LPaint.Style := TSkPaintStyle.Stroke;
+    LPaint.StrokeWidth := 2.5;
+    LPaint.StrokeCap := TSkStrokeCap.Round;
+    LPaint.Color := $FF2A2A2A;
+    PB := TSkPathBuilder.Create;
+
+    PB.MoveTo(22, 8);
+    PB.LineTo(22, 16); // Body
+
+    if Frame = 0 then
+    begin
+      PB.MoveTo(22, 10);
+      PB.LineTo(16, 6); // Arm up
+      PB.MoveTo(22, 16);
+      PB.LineTo(18, 22); // Leg 1
+      PB.MoveTo(22, 16);
+      PB.LineTo(26, 20); // Leg 2
+    end
+    else
+    begin
+      PB.MoveTo(22, 14);
+      PB.LineTo(16, 18); // Arm down
+      PB.MoveTo(22, 16);
+      PB.LineTo(26, 22); // Leg 1
+      PB.MoveTo(22, 16);
+      PB.LineTo(18, 20); // Leg 2
+    end;
+    LCanvas.DrawPath(PB.Snapshot, LPaint);
+
+    LPaint.Style := TSkPaintStyle.Fill;
+    LPaint.Color := $FFD2B48C;
+    LCanvas.DrawCircle(PointF(24, 4), 4.5, LPaint);
+    LPaint.Color := TAlphaColors.Black;
+    LCanvas.DrawCircle(PointF(26, 3), 1, LPaint);
+
+    FHumanClimbImgs[Frame] := LSurf.MakeImageSnapshot;
+  end;
+
+  // Parachute
   LSurf := TSkSurface.MakeRaster(48, 48);
   LCanvas := LSurf.Canvas;
   LCanvas.Clear($00000000);
@@ -715,7 +915,6 @@ begin
   LCanvas.DrawPath(PB.Snapshot, LPaint);
   FParaImg := LSurf.MakeImageSnapshot;
 end;
-
 
 { --- LEVEL GENERATION --- }
 procedure TSkiaLemmings.GenerateProceduralMap;
@@ -775,6 +974,7 @@ begin
 
   FLoot.Clear;
   FEnemies.Clear;
+  FBridgePlates.Clear;
 
   for var I := 0 to 20 do
   begin
@@ -790,12 +990,11 @@ begin
     if Random(2) = 0 then
     begin
       Loot.Pos := PointF((CaveX + CaveW / 2) * TILE_SIZE, (CaveY + CaveH / 2) * TILE_SIZE);
-      Loot.Kind := Random(11); // 0 to 10
+      Loot.Kind := Random(11);
       Loot.Collected := False;
       Loot.Phase := 0;
 
-      // Make sure it's not stuck in the ground
-      while IsSolidTile(FTiles, FMapCols, FMapRows, Loot.Pos.X, Loot.Pos.Y) do
+      while IsSolidAt(Loot.Pos.X, Loot.Pos.Y) do
         Loot.Pos.Y := Loot.Pos.Y - 4.0;
 
       FLoot.Add(Loot);
@@ -826,7 +1025,6 @@ begin
     end;
   end;
 
-  // Create Exit Gate area
   var GateY := FMapRows - 4;
   for var ty := GateY - 5 to FMapRows - 3 do
     for var tx := FMapCols - 11 to FMapCols - 4 do
@@ -836,7 +1034,6 @@ begin
     for var ty := FMapRows - 3 to FMapRows - 1 do
       FTiles[ty * FMapCols + tx] := StoneTile;
 
-  // Lowered Gate so bottom circle touches the ground
   FGate.Pos := PointF((FMapCols - 9) * TILE_SIZE, (FMapRows - 3) * TILE_SIZE - 64);
   FGate.Width := 64;
   FGate.Height := 64;
@@ -850,7 +1047,6 @@ begin
   FGameState := gsPlaying;
   FLemmings.Clear;
 
-  // Initial Ammo for all tools
   FDigAmmo := 5;
   FMineAmmo := 5;
   FBombAmmo := 3;
@@ -872,8 +1068,14 @@ var
   I: Integer;
 begin
   SetLength(FBgClouds, 30);
+  SetLength(FBgMountainsFar, 15);
+  SetLength(FBgMountainsNear, 10);
   for I := 0 to High(FBgClouds) do
     FBgClouds[I] := PointF(Random(FMapCols * TILE_SIZE * 2), Random(300) + 20);
+  for I := 0 to High(FBgMountainsFar) do
+    FBgMountainsFar[I] := PointF(Random(FMapCols * TILE_SIZE * 2), 0);
+  for I := 0 to High(FBgMountainsNear) do
+    FBgMountainsNear[I] := PointF(Random(FMapCols * TILE_SIZE * 2), 0);
 end;
 
 { --- GAME LOGIC --- }
@@ -912,12 +1114,11 @@ begin
     Exit;
   L := FLemmings[FAimLemmingIndex];
   DX := TargetX - (L.Pos.X + L.Width / 2);
-  DY := TargetY - (L.Pos.Y - 4); // Match simulation start Y
+  DY := TargetY - (L.Pos.Y - 4);
   Len := Sqrt(DX * DX + DY * DY);
   if Len = 0 then
     Len := 1;
   Power := Min(1500, Len * 5);
-  // Shoot exactly from FAimStart position
   B.Pos := PointF(L.Pos.X + L.Width / 2, L.Pos.Y - 4);
   B.Vel := PointF((DX / Len) * Power, (DY / Len) * Power);
   B.Active := True;
@@ -931,30 +1132,65 @@ end;
 
 procedure TSkiaLemmings.EraserAt(const X, Y: Single);
 begin
-  ExplodeTerrain(FTiles, FMapCols, FMapRows, X, Y, 1.5);
+  ExplodeTerrainAndPlates(X, Y, 1.5);
   SpawnExplosion(X, Y, TAlphaColors.White, 2.0);
   PlayEffect(1);
+end;
+
+procedure TSkiaLemmings.ExplodeTerrainAndPlates(const X, Y, Radius: Single);
+var
+  I: Integer;
+  P: TBridgePlate;
+begin
+  ExplodeTerrain(FTiles, FMapCols, FMapRows, X, Y, Radius);
+  for I := FBridgePlates.Count - 1 downto 0 do
+  begin
+    P := FBridgePlates[I];
+    if PtDistance(PointF(P.X + P.W / 2, P.Y + P.H / 2), PointF(X, Y)) <= (Radius * TILE_SIZE) then
+      FBridgePlates.Delete(I);
+  end;
 end;
 
 procedure TSkiaLemmings.BuildBridge(const P1, P2: TPointF);
 var
   DX, DY, Dist, StepX, StepY, CurX, CurY: Single;
   Steps, I: Integer;
+  Plate: TBridgePlate;
+  BaseY: Single;
 begin
   DX := P2.X - P1.X;
   DY := P2.Y - P1.Y;
   Dist := Sqrt(DX * DX + DY * DY);
-  if Dist > TILE_SIZE then
+  if Dist > 4 then
   begin
-    Steps := Trunc(Dist / (TILE_SIZE * 0.5));
+    // Snap bridge start to ground if close below
+    BaseY := P1.Y;
+    for var D := 0 to 12 do
+    begin
+      if IsSolidAt(P1.X, P1.Y + D, True) then
+      begin
+        BaseY := P1.Y + D;
+        Break;
+      end;
+    end;
+
+    // Make plates wider (12px) so they overlap better and prevent falling through
+    Steps := Trunc(Dist / 10) + 1;
     StepX := DX / Steps;
-    StepY := DY / Steps;
+    StepY := (DY + (BaseY - P1.Y)) / Steps;
     CurX := P1.X;
     CurY := P1.Y;
+
     for I := 0 to Steps do
     begin
-      if not IsSolidTile(FTiles, FMapCols, FMapRows, CurX, CurY) then
-        SetTile(FTiles, FMapCols, FMapRows, CurX, CurY, CBridgeTile);
+      if not IsSolidAt(CurX, CurY, True) then
+      begin
+        Plate.X := CurX - 6;
+        Plate.Y := CurY - 1;
+        Plate.W := 12;
+        Plate.H := 3;
+        FBridgePlates.Add(Plate);
+      end;
       CurX := CurX + StepX;
       CurY := CurY + StepY;
     end;
@@ -969,6 +1205,12 @@ var
   I: Integer;
   L: TLemming;
   T: TTile;
+  GroundY: Single;
+  BuilderBlocking: Boolean;
+  B: TLemming;
+  FrontX, CheckY: Single;
+  HitWall: Boolean;
+  LookAheadX: Single;
 begin
   if FSpawnPoint.Spawned < FMaxLemmings then
   begin
@@ -1008,7 +1250,7 @@ begin
     if L.State = lsGrabbed then
     begin
       var TargetPos := ScreenToWorld(FMouseScreen) - L.GrabOffset;
-      if not IsSolidTile(FTiles, FMapCols, FMapRows, TargetPos.X, TargetPos.Y, True) then
+      if not IsSolidAt(TargetPos.X, TargetPos.Y, True) then
         L.Pos := TargetPos;
       FLemmings[I] := L;
       Continue;
@@ -1024,9 +1266,12 @@ begin
     begin
       var Step := L.MineDir * 2.0;
       var NextPos := L.Pos + Step;
-      T := GetTile(FTiles, FMapCols, FMapRows, NextPos.X + L.Width / 2, NextPos.Y + L.Height / 2);
-      if T.Solid and (T.DigTime >= 0) and (T.TileType <> ttBlocker) then
-        SetTile(FTiles, FMapCols, FMapRows, NextPos.X + L.Width / 2, NextPos.Y + L.Height / 2, CEmptyTile);
+      if IsSolidAt(NextPos.X + L.Width / 2, NextPos.Y + L.Height / 2, True) then
+      begin
+        T := GetTile(FTiles, FMapCols, FMapRows, NextPos.X + L.Width / 2, NextPos.Y + L.Height / 2);
+        if T.Solid and (T.DigTime >= 0) and (T.TileType <> ttBlocker) then
+          SetTile(FTiles, FMapCols, FMapRows, NextPos.X + L.Width / 2, NextPos.Y + L.Height / 2, CEmptyTile);
+      end;
       L.Pos := NextPos;
       L.DigTimer := L.DigTimer - DeltaSec;
       if L.DigTimer <= 0 then
@@ -1039,20 +1284,77 @@ begin
       lsWalking:
         begin
           L.Vel.X := LEMMING_SPEED * L.Dir;
-          L.Pos.X := L.Pos.X + L.Vel.X;
-          if IsSolidTile(FTiles, FMapCols, FMapRows, L.Pos.X + (ifthen(L.Dir = 1, L.Width, 0)), L.Pos.Y + L.Height - 2, True) then
+          var NextX := L.Pos.X + L.Vel.X;
+
+          // Determine front edge X coordinate
+          if L.Dir = 1 then
+            FrontX := NextX + L.Width
+          else
+            FrontX := NextX;
+
+          // 1. FIRST check if there is a bridge builder right in front of us.
+          BuilderBlocking := False;
+          for B in FLemmings do
           begin
-            if L.IsClimber then
-              L.State := lsClimbing
-            else
+            if (B.State = lsBridging) and (B.Pos.Y < L.Pos.Y + L.Height) then
             begin
-              L.Dir := -L.Dir;
-              L.Pos.X := L.Pos.X + (L.Dir * 2);
+              if (FrontX >= B.Pos.X - 8) and (FrontX <= B.Pos.X + B.Width + 8) then
+              begin
+                BuilderBlocking := True;
+                Break;
+              end;
             end;
           end;
-          if IsSolidTile(FTiles, FMapCols, FMapRows, L.Pos.X + L.Width / 2, L.Pos.Y + L.Height + 1, True) then
+
+          if BuilderBlocking then
           begin
-            L.Pos.Y := Trunc((L.Pos.Y + L.Height) / TILE_SIZE) * TILE_SIZE - L.Height;
+            L.Dir := -L.Dir;
+            L.Pos.X := L.Pos.X + (L.Dir * 2);
+          end
+          else
+          begin
+            // 2. Check if there is a solid wall in front at multiple heights
+            CheckY := L.Pos.Y + L.Height - 2; // Feet
+            HitWall := IsSolidAt(FrontX, CheckY, True);
+            if not HitWall then
+            begin
+              CheckY := L.Pos.Y + L.Height - 12; // Middle
+              HitWall := IsSolidAt(FrontX, CheckY, True);
+            end;
+            if not HitWall then
+            begin
+              CheckY := L.Pos.Y + 4; // Chest
+              HitWall := IsSolidAt(FrontX, CheckY, True);
+            end;
+
+            if HitWall then
+            begin
+              if L.IsClimber then
+                L.State := lsClimbing
+              else
+              begin
+                L.Dir := -L.Dir;
+                L.Pos.X := L.Pos.X + (L.Dir * 2);
+              end;
+            end
+            else
+            begin
+              // 3. If no wall, check if there is a Bridge Plate to step up onto
+              var BridgeUpY := GetBridgeStepUp(FrontX, L.Pos.Y + L.Height - 2);
+              if (BridgeUpY <> -1) and ((L.Pos.Y + L.Height) - BridgeUpY <= 8) then
+              begin
+                L.Pos.Y := BridgeUpY - L.Height;
+                L.Pos.X := NextX;
+              end
+              else
+                L.Pos.X := NextX;
+            end;
+          end;
+
+          GroundY := GetSurfaceY(L.Pos.X + L.Width / 2, L.Pos.Y + L.Height + 1, True);
+          if GroundY <> -1 then
+          begin
+            L.Pos.Y := GroundY - L.Height;
             L.FallDistance := 0;
           end
           else
@@ -1065,9 +1367,11 @@ begin
             L.Vel.Y := 4.0;
           L.Pos.Y := L.Pos.Y + L.Vel.Y * TILE_SIZE * DeltaSec;
           L.FallDistance := L.FallDistance + (L.Vel.Y * TILE_SIZE * DeltaSec);
-          if IsSolidTile(FTiles, FMapCols, FMapRows, L.Pos.X + L.Width / 2, L.Pos.Y + L.Height + 1, True) then
+
+          GroundY := GetSurfaceY(L.Pos.X + L.Width / 2, L.Pos.Y + L.Height + 1, True);
+          if GroundY <> -1 then
           begin
-            L.Pos.Y := Trunc((L.Pos.Y + L.Height) / TILE_SIZE) * TILE_SIZE - L.Height;
+            L.Pos.Y := GroundY - L.Height;
             L.State := lsWalking;
             L.Vel.Y := 0;
             L.FallDistance := 0;
@@ -1077,14 +1381,22 @@ begin
         begin
           L.Vel.Y := -LEMMING_SPEED;
           L.Pos.Y := L.Pos.Y - 1;
+
+          // Determine where to look ahead for empty space to pull up
           if L.Dir = 1 then
-            L.Pos.X := Trunc((L.Pos.X + L.Width) / TILE_SIZE) * TILE_SIZE - L.Width - 1
+            LookAheadX := L.Pos.X + L.Width
           else
-            L.Pos.X := Trunc(L.Pos.X / TILE_SIZE) * TILE_SIZE + 1;
-          if not IsSolidTile(FTiles, FMapCols, FMapRows, L.Pos.X + (ifthen(L.Dir = 1, L.Width, 0)), L.Pos.Y + L.Height - 2, True) then
+            LookAheadX := L.Pos.X;
+
+          // Climb over top: ONLY check if the space ABOVE the head is empty.
+          if not IsSolidAt(LookAheadX, L.Pos.Y - 4, True) then
+          begin
+            if L.Dir = 1 then
+              L.Pos.X := L.Pos.X + 4
+            else
+              L.Pos.X := L.Pos.X - 4;
             L.State := lsWalking;
-          if IsSolidTile(FTiles, FMapCols, FMapRows, L.Pos.X + L.Width / 2, L.Pos.Y - 2, True) then
-            L.State := lsWalking;
+          end;
         end;
       lsDigging:
         begin
@@ -1096,6 +1408,12 @@ begin
             if L.DigTimer >= T.DigTime then
             begin
               SetTile(FTiles, FMapCols, FMapRows, L.Pos.X + L.Width / 2, L.Pos.Y + L.Height + 2, CEmptyTile);
+              for var BB := FBridgePlates.Count - 1 downto 0 do
+              begin
+                var P := FBridgePlates[BB];
+                if (P.X + P.W >= L.Pos.X) and (P.X <= L.Pos.X + L.Width) and (P.Y + P.H >= L.Pos.Y + L.Height) and (P.Y <= L.Pos.Y + L.Height + TILE_SIZE) then
+                  FBridgePlates.Delete(BB);
+              end;
               L.DigTimer := 0;
               L.Pos.Y := L.Pos.Y + 4;
               L.State := lsFalling;
@@ -1110,7 +1428,7 @@ begin
           L.BombTimer := L.BombTimer - DeltaSec;
           if L.BombTimer <= 0 then
           begin
-            ExplodeTerrain(FTiles, FMapCols, FMapRows, L.Pos.X + L.Width / 2, L.Pos.Y + L.Height / 2, 2.5);
+            ExplodeTerrainAndPlates(L.Pos.X + L.Width / 2, L.Pos.Y + L.Height / 2, 2.5);
             KillLemming(L);
           end;
         end;
@@ -1121,24 +1439,37 @@ begin
           if L.DigTimer >= 0.5 then
           begin
             L.DigTimer := 0;
-            var PlaceX := L.Pos.X + (ifthen(L.Dir = 1, L.Width, -1));
-            var PlaceY := L.Pos.Y + L.Height - 4;
-            if not IsSolidTile(FTiles, FMapCols, FMapRows, PlaceX, PlaceY, True) then
+            var PlaceX := L.Pos.X + L.Width / 2;
+            var PlaceY := L.Pos.Y + L.Height - 1;
+            if not IsSolidAt(PlaceX, PlaceY, True) then
             begin
-              SetTile(FTiles, FMapCols, FMapRows, PlaceX, PlaceY, CBridgeTile);
-              L.Pos.X := L.Pos.X + (L.Dir * 8);
-              L.Pos.Y := L.Pos.Y - 8;
-              Inc(L.BridgeStep);
-              if (L.BridgeStep >= 12) or IsSolidTile(FTiles, FMapCols, FMapRows, L.Pos.X + L.Width / 2, L.Pos.Y - 2, True) then
-                L.State := lsWalking;
-            end
+              var Plate: TBridgePlate;
+              Plate.X := PlaceX - 6;
+              Plate.Y := PlaceY - 1;
+              Plate.W := 12;
+              Plate.H := 3;
+              FBridgePlates.Add(Plate);
+              PlayEffect(5);
+            end;
+
+            var StepX := L.Pos.X + (L.Dir * (L.Width + 4));
+            var StepY := L.Pos.Y - 4;
+
+            if IsSolidAt(StepX, StepY + L.Height - 2, True) or IsSolidAt(StepX, StepY - 2, True) then
+              L.State := lsWalking
             else
-              L.State := lsWalking;
+            begin
+              L.Pos.X := L.Pos.X + (L.Dir * 4);
+              L.Pos.Y := StepY;
+              Inc(L.BridgeStep);
+              if (L.BridgeStep >= 12) then
+                L.State := lsWalking;
+            end;
           end;
         end;
       lsBlocking:
         begin
-          if not IsSolidTile(FTiles, FMapCols, FMapRows, L.Pos.X + L.Width / 2, L.Pos.Y + L.Height + 1, True) then
+          if GetSurfaceY(L.Pos.X + L.Width / 2, L.Pos.Y + L.Height + 1, True) = -1 then
             L.State := lsFalling;
         end;
     end;
@@ -1189,7 +1520,7 @@ begin
         B.Pos := FPortals[0].Pos - PointF(0, 20);
     end;
 
-    var HitTerrain := IsSolidTile(FTiles, FMapCols, FMapRows, B.Pos.X, B.Pos.Y);
+    var HitTerrain := IsSolidAt(B.Pos.X, B.Pos.Y);
     var HitEnemy := False;
     for J := 0 to FEnemies.Count - 1 do
     begin
@@ -1205,7 +1536,7 @@ begin
 
     if HitTerrain or HitEnemy then
     begin
-      ExplodeTerrain(FTiles, FMapCols, FMapRows, B.Pos.X, B.Pos.Y, 2.5);
+      ExplodeTerrainAndPlates(B.Pos.X, B.Pos.Y, 2.5);
       SpawnExplosion(B.Pos.X, B.Pos.Y, TAlphaColors.Orange, 6.0);
       PlayEffect(3);
       B.Active := False;
@@ -1221,6 +1552,7 @@ procedure TSkiaLemmings.UpdateEnemies(DeltaSec: Double);
 var
   I: Integer;
   E: TEnemy;
+  GroundY: Single;
 begin
   for I := FEnemies.Count - 1 downto 0 do
   begin
@@ -1233,10 +1565,12 @@ begin
     E.Phase := E.Phase + DeltaSec * 5;
     E.Pos.X := E.Pos.X + E.Vel.X * DeltaSec;
     E.Pos.Y := E.Pos.Y + 15 * DeltaSec;
-    if IsSolidTile(FTiles, FMapCols, FMapRows, E.Pos.X + E.Width / 2, E.Pos.Y + E.Height) then
+
+    GroundY := GetSurfaceY(E.Pos.X + E.Width / 2, E.Pos.Y + E.Height, True);
+    if GroundY <> -1 then
     begin
-      E.Pos.Y := Trunc((E.Pos.Y + E.Height) / TILE_SIZE) * TILE_SIZE - E.Height;
-      if IsSolidTile(FTiles, FMapCols, FMapRows, E.Pos.X + E.Width / 2 + Sign(E.Vel.X) * 10, E.Pos.Y + E.Height / 2) then
+      E.Pos.Y := GroundY - E.Height;
+      if IsSolidAt(E.Pos.X + E.Width / 2 + Sign(E.Vel.X) * 10, E.Pos.Y + E.Height / 2) then
         E.Vel.X := -E.Vel.X;
     end;
     FEnemies[I] := E;
@@ -1392,6 +1726,70 @@ var
 begin
   inherited;
 
+  if Button = TMouseButton.mbMiddle then
+  begin
+    FIsPanning := True;
+    FPanStart := PointF(X, Y);
+    Exit;
+  end;
+
+  if FMenuActive then
+  begin
+    var CenterX := Width / 2;
+    var CenterY := Height / 2;
+    var BtnW := 200;
+    var BtnH := 40;
+    var BtnX := CenterX - BtnW / 2;
+    var BtnY := CenterY - 20;
+
+    if FGameState = gsWin then
+    begin
+      // Win Screen Menu (Only 1 Button)
+      if PtInRect(PointF(X, Y), RectF(BtnX, BtnY, BtnX + BtnW, BtnY + BtnH)) then
+      begin
+        Inc(FLevel);
+        GenerateProceduralMap;
+        GenerateBackgroundElements;
+        FGameState := gsPlaying;
+        FMenuActive := True; // Start next level paused
+      end;
+    end
+    else
+    begin
+      // Normal Pause Menu
+      if PtInRect(PointF(X, Y), RectF(BtnX, BtnY, BtnX + BtnW, BtnY + BtnH)) then
+      begin
+        FMenuActive := False; // Start / Resume
+        FGameState := gsPlaying;
+      end
+      else if PtInRect(PointF(X, Y), RectF(BtnX, BtnY + BtnH + 10, BtnX + BtnW, BtnY + 2 * BtnH + 10)) then
+      begin
+        GenerateProceduralMap;
+        FMenuActive := True; // Keep paused on reset
+        FGameState := gsPlaying;
+      end
+      else if PtInRect(PointF(X, Y), RectF(BtnX, BtnY + 2 * (BtnH + 10), BtnX + BtnW, BtnY + 3 * BtnH + 20)) then
+      begin
+        Inc(FLevel);
+        GenerateProceduralMap;
+        GenerateBackgroundElements;
+        FMenuActive := True; // Keep paused on new level
+        FGameState := gsPlaying;
+      end;
+    end;
+    Exit; // Prevent clicks from going through to the map
+  end;
+
+  if FGameState = gsWin then
+    Exit; // Extra safety
+
+  if Button = TMouseButton.mbMiddle then
+  begin
+    FIsPanning := True;
+    FPanStart := PointF(X, Y);
+    Exit;
+  end;
+
   if FMenuActive then
   begin
     var CenterX := Width / 2;
@@ -1419,10 +1817,9 @@ begin
     Exit;
   end;
 
-  // Toolbar clicks
   if Y >= Height - 200 then
   begin
-    if Y < Height - 100 then // Row 1
+    if Y < Height - 100 then
     begin
       var BtnW := Width / 6;
       if X < BtnW then
@@ -1438,7 +1835,7 @@ begin
       else
         FActiveTool := ttBlockerTool;
     end
-    else // Row 2
+    else
     begin
       var BtnW := Width / 7;
       if X < BtnW then
@@ -1454,12 +1851,9 @@ begin
       else if X < BtnW * 6 then
       begin
         FUnlimited := not FUnlimited;
-        FActiveTool := ttUnlimited;
       end
       else
-      begin
-        FMenuActive := not FMenuActive; // Menu Button
-      end;
+        FMenuActive := not FMenuActive;
     end;
     RenderToolbarCache;
     Exit;
@@ -1517,7 +1911,12 @@ begin
   begin
     if FUnlimited or (FEraserAmmo > 0) then
     begin
-      EraserAt(WorldP.X, WorldP.Y);
+      FLock.Acquire;
+      try
+        EraserAt(WorldP.X, WorldP.Y);
+      finally
+        FLock.Release;
+      end;
       if not FUnlimited then
         Dec(FEraserAmmo);
       RenderToolbarCache;
@@ -1641,7 +2040,7 @@ begin
           if FUnlimited or (FClimberAmmo > 0) then
           begin
             LemToChange.IsClimber := True;
-            if IsSolidTile(FTiles, FMapCols, FMapRows, L.Pos.X + (ifthen(L.Dir = 1, L.Width, 0)), L.Pos.Y + L.Height - 2, True) then
+            if IsSolidAt(L.Pos.X + (ifthen(L.Dir = 1, L.Width, 0)), L.Pos.Y + L.Height - 2, True) then
               LemToChange.State := lsClimbing;
             CanApply := True;
             if not FUnlimited then
@@ -1663,6 +2062,7 @@ begin
         if CanApply then
         begin
           FLemmings[I] := LemToChange;
+          RenderToolbarCache; // Update toolbar immediately
           Break;
         end;
       end;
@@ -1674,6 +2074,25 @@ procedure TSkiaLemmings.MouseMove(Shift: TShiftState; X, Y: Single);
 begin
   inherited;
   FMouseScreen := PointF(X, Y);
+
+  if FIsPanning then
+  begin
+    var DX := X - FPanStart.X;
+    var DY := Y - FPanStart.Y;
+    var MapWidth := FMapCols * TILE_SIZE;
+    var MapHeight := FMapRows * TILE_SIZE;
+    var ScreenW := Width;
+    var ScreenH := Height - 200;
+    var BaseScale := Min(ScreenW / MapWidth, ScreenH / MapHeight);
+    var ActualScale := BaseScale * FZoom;
+
+    FCameraX := EnsureRange(FCameraX - (DX / ActualScale), 0, Max(0, MapWidth - (ScreenW / ActualScale)));
+    FCameraY := EnsureRange(FCameraY - (DY / ActualScale), 0, Max(0, MapHeight - (ScreenH / ActualScale)));
+    FPanStart := PointF(X, Y);
+    CalculateViewMetrics;
+    Exit;
+  end;
+
   if (FGameState = gsAiming) or FIsDrawingBridge or FIsAimingMine then
   begin
     FTouchEnd := ScreenToWorld(FMouseScreen);
@@ -1688,11 +2107,23 @@ var
   L: TLemming;
 begin
   inherited;
+
+  if Button = TMouseButton.mbMiddle then
+  begin
+    FIsPanning := False;
+    Exit;
+  end;
+
   if FIsDrawingBridge then
   begin
     FIsDrawingBridge := False;
-    BuildBridge(FTouchStart, FTouchEnd);
-    RenderToolbarCache;
+    FLock.Acquire;
+    try
+      BuildBridge(FTouchStart, FTouchEnd);
+    finally
+      FLock.Release;
+    end;
+    RenderToolbarCache; // Update toolbar to show reduced ammo
   end;
   if FIsAimingMine then
   begin
@@ -1714,6 +2145,7 @@ begin
       end;
     end;
     FMineLemmingIndex := -1;
+    RenderToolbarCache; // Update toolbar
   end;
 end;
 
@@ -1822,12 +2254,16 @@ begin
     if (FGameState = gsPlaying) and (FSpawnPoint.Spawned >= FMaxLemmings) and (FLemmings.Count = 0) then
     begin
       FGameState := gsWin;
-      FWinTime := 3.0;
+      FWinTime := 3.0; // Short delay before menu opens
+      FMenuActive := True; // Bring up the menu automatically
     end;
   finally
     FLock.Release;
   end;
 end;
+
+
+
 
 { --- RENDERING --- }
 procedure TSkiaLemmings.DrawBackgrounds(const ACanvas: ISkCanvas; const ADest: TRectF);
@@ -1836,25 +2272,65 @@ var
   Colors: TArray<TAlphaColor>;
   I: Integer;
   ParallaxX, CloudX, CloudY: Single;
+  MapWidth, ScreenW, BaseScale: Single;
 begin
-  Colors := [$FF05050A, $FF0A0A12, $FF020205];
+  MapWidth := FMapCols * TILE_SIZE;
+  ScreenW := Width;
+  BaseScale := Min(ScreenW / MapWidth, (Height - 200) / (FMapRows * TILE_SIZE));
+
+  // 1. Draw the base background colors (Dark Blue/Black)
   Paint := TSkPaint.Create;
-  Paint.Shader := TSkShader.MakeGradientLinear(PointF(0, 0), PointF(0, ADest.Height - 200), Colors, nil, TSkTileMode.Clamp);
+  Paint.Style := TSkPaintStyle.Fill;
+  Paint.Color := $FF05050A; // Opaque base color
   ACanvas.DrawPaint(Paint);
 
-  ParallaxX := -FCameraX * 0.1 * FZoom;
   Paint.AntiAlias := True;
   Paint.MaskFilter := nil;
+
+  // 2. Draw Far Mountains (Slow parallax)
+  Paint.Color := $FF1A1A2A;
+  Paint.Alpha := 180;
+  ParallaxX := -FCameraX * 0.2 * FZoom;
+  for I := 0 to High(FBgMountainsFar) do
+  begin
+    CloudX := (FBgMountainsFar[I].X * FZoom) + ParallaxX;
+    CloudY := (Height - 350) - (50 * FZoom);
+    if CloudX < -300 then
+      CloudX := CloudX + (MapWidth * 2 * FZoom);
+    ACanvas.DrawCircle(PointF(CloudX, CloudY), 80 * FZoom, Paint);
+  end;
+
+  // 3. Draw Near Mountains (Faster parallax)
+  Paint.Color := $FF222238;
+  Paint.Alpha := 255;
+  ParallaxX := -FCameraX * 0.4 * FZoom;
+  for I := 0 to High(FBgMountainsNear) do
+  begin
+    CloudX := (FBgMountainsNear[I].X * FZoom) + ParallaxX;
+    CloudY := (Height - 320) - (30 * FZoom); // Moved up
+    if CloudX < -200 then
+      CloudX := CloudX + (MapWidth * 2 * FZoom);
+    ACanvas.DrawCircle(PointF(CloudX, CloudY), 50 * FZoom, Paint);
+  end;
+
+  // 4. Draw Clouds
+  Paint.Color := $FF1A1A2A;
+  Paint.Alpha := 80;
+  ParallaxX := -FCameraX * 0.1 * FZoom;
   for I := 0 to High(FBgClouds) do
   begin
     CloudX := (FBgClouds[I].X * FZoom) + ParallaxX;
     CloudY := FBgClouds[I].Y * FZoom;
     if CloudX < -200 then
-      CloudX := CloudX + (FMapCols * TILE_SIZE * 2 * FZoom);
-    Paint.Color := $FF1A1A2A;
-    Paint.Alpha := 80;
+      CloudX := CloudX + (MapWidth * 2 * FZoom);
     ACanvas.DrawCircle(PointF(CloudX, CloudY), 60 * FZoom, Paint);
   end;
+
+  // 5. Apply the dark gradient as a transparent overlay (fog) instead of an opaque layer
+  Colors := [$FF05050A, $00000000, $00000000]; // Transparent in the middle
+  Paint.Shader := TSkShader.MakeGradientLinear(PointF(0, 0), PointF(0, ADest.Height), Colors, nil, TSkTileMode.Clamp);
+  Paint.Alpha := 150; // Make it a fog
+  ACanvas.DrawPaint(Paint);
 end;
 
 procedure TSkiaLemmings.DrawTileMap(const ACanvas: ISkCanvas);
@@ -1913,6 +2389,24 @@ begin
       end;
       ACanvas.DrawRect(TileRect, OutlinePaint);
     end;
+end;
+
+procedure TSkiaLemmings.DrawBridgePlates(const ACanvas: ISkCanvas);
+var
+  P: TBridgePlate;
+  Paint, OutlinePaint: ISkPaint;
+begin
+  Paint := TSkPaint.Create(TSkPaintStyle.Fill);
+  Paint.AntiAlias := True;
+  Paint.Color := $FFDEB887;
+  OutlinePaint := TSkPaint.Create(TSkPaintStyle.Stroke);
+  OutlinePaint.StrokeWidth := 1;
+  OutlinePaint.Color := $FF8B4513;
+  for P in FBridgePlates do
+  begin
+    ACanvas.DrawRect(RectF(P.X, P.Y, P.X + P.W, P.Y + P.H), Paint);
+    ACanvas.DrawRect(RectF(P.X, P.Y, P.X + P.W, P.Y + P.H), OutlinePaint);
+  end;
 end;
 
 procedure TSkiaLemmings.DrawSpawnGate(const ACanvas: ISkCanvas);
@@ -2082,7 +2576,7 @@ begin
     SimPos := SimPos + SimVel * 0.05;
     if I mod 2 = 0 then
       ACanvas.DrawCircle(SimPos, 2, Paint);
-    if IsSolidTile(FTiles, FMapCols, FMapRows, SimPos.X, SimPos.Y) then
+    if IsSolidAt(SimPos.X, SimPos.Y) then
       Break;
   end;
   Paint.Style := TSkPaintStyle.Stroke;
@@ -2139,37 +2633,82 @@ procedure TSkiaLemmings.DrawLemmings(const ACanvas: ISkCanvas);
 var
   L: TLemming;
   Img: ISkImage;
-  Bounce: Single;
+  Bounce, YOffset, XOffset: Single;
   Paint: ISkPaint;
+  AnimFrame: Integer;
 begin
   Paint := TSkPaint.Create;
   for L in FLemmings do
   begin
     if not L.Alive then
       Continue;
-    if FUseCatAvatar then
-      Img := FCatImg
+
+    AnimFrame := 0;
+    if (L.State in [lsWalking, lsBridging, lsMiningDir, lsClimbing]) then
+      AnimFrame := Trunc(L.AnimPhase) mod 2;
+
+    XOffset := 0;
+    if L.State = lsClimbing then
+    begin
+      if FUseCatAvatar then
+        Img := FCatClimbImgs[AnimFrame]
+      else
+        Img := FHumanClimbImgs[AnimFrame];
+      YOffset := 2; // Pull image 2px down to hang outside the wall
+
+      // Snap the image to the OUTSIDE edge, but move it 14px closer to the wall
+      if L.Dir = 1 then
+        // Wall is right. Move 14px closer (add 14 to XOffset)
+        XOffset := (Trunc((L.Pos.X + L.Width) / TILE_SIZE) * TILE_SIZE - L.Width) - L.Pos.X + 14
+      else
+        // Wall is left. Move 14px closer (subtract 14 from XOffset)
+        XOffset := (Trunc(L.Pos.X / TILE_SIZE) * TILE_SIZE + TILE_SIZE) - L.Pos.X - 14;
+    end
     else
-      Img := FHumanImg;
+    begin
+      if FUseCatAvatar then
+        Img := FCatImgs[AnimFrame]
+      else
+        Img := FHumanImgs[AnimFrame];
+      YOffset := 0;
+    end;
+
     if not Assigned(Img) then
       Continue;
+
     Bounce := 0;
     if L.State = lsWalking then
       Bounce := Abs(Sin(L.AnimPhase * 2)) * 1.5;
+
     ACanvas.Save;
     try
-      ACanvas.Translate(L.Pos.X, L.Pos.Y - Bounce);
-      if L.Dir = -1 then
+      ACanvas.Translate(L.Pos.X + XOffset, L.Pos.Y - Bounce + YOffset);
+
+      if (L.State = lsClimbing) then
       begin
-        ACanvas.Scale(-1, 1);
-        ACanvas.Translate(-L.Width, 0);
+        if L.Dir = 1 then
+        begin
+          ACanvas.Scale(-1, 1);
+          ACanvas.Translate(-L.Width, 0);
+        end;
+      end
+      else
+      begin
+        if L.Dir = -1 then
+        begin
+          ACanvas.Scale(-1, 1);
+          ACanvas.Translate(-L.Width, 0);
+        end;
       end;
+
       ACanvas.DrawImage(Img, 0, 0, Paint);
     finally
       ACanvas.Restore;
     end;
+
     if (L.State = lsFalling) and (L.Vel.Y > 2.0) and Assigned(FParaImg) then
-      ACanvas.DrawImage(FParaImg, L.Pos.X - 8, L.Pos.Y - 20, Paint);
+      ACanvas.DrawImage(FParaImg, L.Pos.X - 4, L.Pos.Y - 20, Paint);
+
     if L.State = lsBombing then
     begin
       Paint.Style := TSkPaintStyle.Fill;
@@ -2244,7 +2783,6 @@ begin
     Paint.Color := TAlphaColors.Yellow;
     Paint.Alpha := 255;
     ACanvas.DrawSimpleText(Txt, 10, 30, Font, Paint);
-
   finally
     Font.Free;
   end;
@@ -2261,12 +2799,15 @@ begin
   Paint := TSkPaint.Create;
   Paint.Color := $AA000000;
   ACanvas.DrawPaint(Paint);
+
   CenterX := ADest.Width / 2;
   CenterY := ADest.Height / 2;
   Rect := TRectF.Create(CenterX - 150, CenterY - 150, CenterX + 150, CenterY + 150);
+
   Paint.Color := $FF333344;
   Paint.AntiAlias := True;
   ACanvas.DrawRoundRect(Rect, 20, 20, Paint);
+
   Paint.Style := TSkPaintStyle.Stroke;
   Paint.StrokeWidth := 3;
   Paint.Color := $FFFFFFFF;
@@ -2277,7 +2818,6 @@ begin
     Paint := TSkPaint.Create(TSkPaintStyle.Fill);
     Paint.AntiAlias := True;
     Paint.Color := TAlphaColors.White;
-    ACanvas.DrawSimpleText('PAUSED', CenterX - 70, CenterY - 100, Font, Paint);
 
     BtnW := 200;
     BtnH := 40;
@@ -2286,14 +2826,31 @@ begin
 
     Paint.Style := TSkPaintStyle.Fill;
     Paint.Color := $FF222233;
-    ACanvas.DrawRect(RectF(BtnX, BtnY, BtnX + BtnW, BtnY + BtnH), Paint);
-    ACanvas.DrawRect(RectF(BtnX, BtnY + BtnH + 10, BtnX + BtnW, BtnY + 2 * BtnH + 10), Paint);
-    ACanvas.DrawRect(RectF(BtnX, BtnY + 2 * (BtnH + 10), BtnX + BtnW, BtnY + 3 * BtnH + 20), Paint);
 
-    Paint.Color := TAlphaColors.Yellow;
-    ACanvas.DrawSimpleText('Resume', BtnX + 60, BtnY + 25, Font, Paint);
-    ACanvas.DrawSimpleText('Reset Level', BtnX + 45, BtnY + BtnH + 35, Font, Paint);
-    ACanvas.DrawSimpleText('New Level', BtnX + 50, BtnY + 2 * BtnH + 45, Font, Paint);
+    // If the level is complete, show different buttons
+    if FGameState = gsWin then
+    begin
+      ACanvas.DrawSimpleText('LEVEL COMPLETE!', CenterX - 100, CenterY - 80, Font, Paint);
+
+      // Only 1 button for Next Level
+      ACanvas.DrawRect(RectF(BtnX, BtnY, BtnX + BtnW, BtnY + BtnH), Paint);
+      Paint.Color := TAlphaColors.Yellow;
+      ACanvas.DrawSimpleText('Next Level', BtnX + 50, BtnY + 25, Font, Paint);
+    end
+    else
+    begin
+      // Normal Pause Menu
+      ACanvas.DrawSimpleText('PAUSED', CenterX - 50, CenterY - 80, Font, Paint);
+
+      ACanvas.DrawRect(RectF(BtnX, BtnY, BtnX + BtnW, BtnY + BtnH), Paint);
+      ACanvas.DrawRect(RectF(BtnX, BtnY + BtnH + 10, BtnX + BtnW, BtnY + 2 * BtnH + 10), Paint);
+      ACanvas.DrawRect(RectF(BtnX, BtnY + 2 * (BtnH + 10), BtnX + BtnW, BtnY + 3 * BtnH + 20), Paint);
+
+      Paint.Color := TAlphaColors.Yellow;
+      ACanvas.DrawSimpleText('Start / Resume', BtnX + 40, BtnY + 25, Font, Paint);
+      ACanvas.DrawSimpleText('Reset Level', BtnX + 45, BtnY + BtnH + 35, Font, Paint);
+      ACanvas.DrawSimpleText('New Level', BtnX + 50, BtnY + 2 * BtnH + 45, Font, Paint);
+    end;
   finally
     Font.Free;
   end;
@@ -2328,6 +2885,7 @@ begin
   FLock.Acquire;
   try
     DrawTileMap(ACanvas);
+    DrawBridgePlates(ACanvas);
     DrawSpawnGate(ACanvas);
     DrawLoot(ACanvas);
     DrawGate(ACanvas);
@@ -2473,6 +3031,7 @@ begin
   FLoot := TList<TLoot>.Create;
   FBazookas := TList<TBazooka>.Create;
   FEnemies := TList<TEnemy>.Create;
+  FBridgePlates := TList<TBridgePlate>.Create;
 
   Align := TAlignLayout.Client;
   HitTest := True;
@@ -2489,6 +3048,7 @@ begin
   FGameSpeed := 1.0;
   FShakeTime := 0;
   FShakeIntensity := 0;
+  FIsPanning := False;
 
   FActiveTool := ttDig;
   FMenuActive := False;
@@ -2496,6 +3056,7 @@ begin
   FVisualMode := 0;
   FFilterMode := 0;
   FUnlimited := False;
+  FMenuActive := True;
 
   FDigAmmo := 5;
   FMineAmmo := 5;
@@ -2533,6 +3094,7 @@ begin
   FreeAndNil(FLoot);
   FreeAndNil(FBazookas);
   FreeAndNil(FEnemies);
+  FreeAndNil(FBridgePlates);
   inherited;
 end;
 
@@ -2549,6 +3111,8 @@ begin
       FileName := 'Game Design Sound Effects - Pavs Music\03 - Crush.wav';
     4:
       FileName := 'Game Design Sound Effects - Pavs Music\12 - TingaLing.wav';
+    5:
+      FileName := 'Game Design Sound Effects - Pavs Music\11 - Tin Light.wav';
   else
     FileName := '';
   end;
