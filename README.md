@@ -36,7 +36,8 @@ The core gameplay loop is fully functional, featuring a massive upgrade in mecha
 The game supports both mouse interaction and keyboard shortcuts. Since it blends different genres, the controls vary depending on your currently selected tool.
 Global Controls
 
-     Mouse Wheel: Zoom in / out (centered on cursor).
+     Mouse Wheel: Zoom in / out (centered on cursor).   
+     Middle mouse button: While zoomed grab and pan the camera view  
      ESC or M: Toggle Pause Menu.
      C: Toggle between Cat and Human avatars.
      V: Switch texture modes (Normal Dirt / Synthwave).
