@@ -1,5 +1,5 @@
 ﻿{*******************************************************************************
-  SkiaLemmings v 0.3 alpha
+  SkiaLemmings v 0.4 alpha
 ********************************************************************************
   A high-performance, thread-safe 2D Lemmings/Worms hybrid engine built entirely
   with Skia4Delphi. No external images or assets are used; all graphics, UI, and
