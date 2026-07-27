@@ -159,6 +159,7 @@ A zipped .exe and sample project are included in the repository for immediate te
    Tetris clone https://github.com/LaMitaOne/Skiatris    
    2D side-scrolling space shooter https://github.com/LaMitaOne/SkiaStarPatrols    
    2.5D isometric cat game https://github.com/LaMitaOne/Skia-A-Cats-Life      
+   2.5D Raycasting doom base https://github.com/LaMitaOne/SkiaDoomBase    
      
 🎮 Game components FMX:    
    MRX Gamepad Core https://github.com/LaMitaOne/MRX-Gamepad-Core       
