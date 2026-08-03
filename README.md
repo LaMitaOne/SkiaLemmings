@@ -4,9 +4,8 @@ A lightweight, multi-threaded Lemmings(Catlings), Worms, and Portal hybrid proto
 What started as a classic Lemmings clone has evolved into a fast-paced Touch-Game: Save the Catlings (or Humans) by digging, building, and blowing up the terrain, while using Portal-guns, Bazookas, and Grab-tools to overcome obstacles and defeat cave monsters!    
 
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/LaMitaOne/SkiaLemmings)   
-  
-<img width="1920" height="1080" alt="Unbenannt" src="https://github.com/user-attachments/assets/60292f5d-f9e4-476e-862a-d3a68481e835" />
-
+    
+<img width="360" height="202" alt="lemmings" src="https://github.com/user-attachments/assets/15a1db79-15cd-4e71-89d0-51ecd4cf6ad3" />
               
 Sample Video: https://www.youtube.com/watch?v=z7uKRacZKko   
     
